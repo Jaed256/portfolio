@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Jaed Pizarro — Inside the Cell</title>
+<meta name="description" content="Jaed Pizarro — Computer Science × Neuroscience. An interactive 3D portfolio set inside a neuron." />
+<style>
+  :root{
+    --accent:#ffc247;
+    --accent-soft:rgba(255,194,71,.15);
+    --accent-glow:rgba(255,194,71,.55);
+    --text:#eef1fa;
+    --muted:#9aa3bb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:#03040a;color:var(--text);-webkit-font-smoothing:antialiased}
+  #scene{position:fixed;inset:0;z-index:0;display:block;touch-action:none}
+  /* custom gloved-hand cursor replaces the native one */
+  html,body,#scene,a,button,.nt,#back,.card{cursor:none}
+
+  #cursor{position:fixed;left:0;top:0;z-index:70;pointer-events:none;
+    opacity:0;transition:opacity .25s ease;will-change:transform}
+  #cursor.on{opacity:1}
+  #cursor .hand{position:absolute;left:-4px;top:-9px;
+    transition:transform .12s ease;transform-origin:5px 9px;
+    filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))}
+  #cursor.grab .hand{transform:scale(.82) rotate(-10deg)}
+  #cursor .glass{position:absolute;left:6px;top:-16px;
+    opacity:0;transform:scale(.3) rotate(-25deg);transform-origin:12px 12px;
+    transition:opacity .2s ease,transform .28s cubic-bezier(.34,1.6,.64,1);
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+  #cursor.look .glass{opacity:1;transform:scale(1) rotate(0);animation:glassBob 1.4s ease-in-out infinite}
+  #cursor.look .hand{transform:scale(.9)}
+  @keyframes glassBob{0%,100%{translate:0 0}50%{translate:1px -2px}}
+
+  #loader{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#03040a;
+    color:var(--muted);font-size:13px;letter-spacing:2px;text-transform:uppercase;transition:opacity .6s}
+  #loader.hidden{opacity:0;pointer-events:none}
+
+  #intro{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:22px;text-align:center;padding:24px;
+    background:radial-gradient(120% 120% at 50% 45%,rgba(8,10,22,.30),rgba(3,4,10,.82) 75%);
+    transition:opacity .9s ease,visibility .9s ease;cursor:none}
+  #intro.hidden{opacity:0;visibility:hidden}
+  #intro h1{font-size:clamp(30px,6vw,60px);font-weight:800;letter-spacing:-1px;text-shadow:0 0 40px var(--accent-glow)}
+  #intro .sub{color:var(--muted);max-width:470px;line-height:1.55;font-size:15px}
+  #intro .cta{margin-top:6px;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--accent);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+  #ui{position:fixed;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .9s ease .2s;display:flex;flex-direction:column}
+  #ui.on{opacity:1}
+  header.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px clamp(16px,4vw,44px);flex-wrap:wrap;gap:12px;pointer-events:auto}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent-glow);transition:background .6s,box-shadow .6s}
+  .brand .name{font-weight:800;font-size:18px;letter-spacing:-.3px}
+  .brand .role{color:var(--muted);font-size:13px}
+  .links a{color:var(--muted);text-decoration:none;font-size:13px;margin-left:18px;transition:color .2s}
+  .links a:hover{color:var(--accent)}
+
+  .selector{display:flex;justify-content:center;gap:clamp(6px,1.3vw,12px);padding:2px clamp(12px,4vw,44px);flex-wrap:wrap;pointer-events:auto}
+  .nt{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);color:var(--muted);padding:9px 15px;border-radius:999px;cursor:pointer;
+    font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;backdrop-filter:blur(8px);transition:transform .2s,border-color .3s,color .3s,background .3s}
+  .nt:hover{transform:translateY(-2px);color:var(--text)}
+  .nt .sw{width:10px;height:10px;border-radius:50%;transition:box-shadow .3s}
+  .nt.active{color:#fff;border-color:var(--accent);background:var(--accent-soft)}
+  .nt.active .sw{box-shadow:0 0 10px 1px currentColor}
+
+  .panel-wrap{flex:1;display:flex;align-items:center;justify-content:flex-start;padding:clamp(14px,3vw,40px);overflow-y:auto;pointer-events:none}
+  .panel{max-width:640px;width:100%;pointer-events:none;opacity:0;transform:translateY(22px);
+    transition:opacity .55s cubic-bezier(.22,1,.36,1) .15s,transform .55s cubic-bezier(.22,1,.36,1) .15s;
+    padding:clamp(20px,3.4vw,40px)}
+  .panel.show{opacity:1;transform:none;pointer-events:auto}
+  #inside:not(.show) .panel{pointer-events:none}
+  .panel .tag{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  .panel .tag .sw{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent-glow)}
+  .panel h2{font-size:clamp(22px,3.6vw,32px);font-weight:800;letter-spacing:-.5px;line-height:1.12}
+  .panel .fact{margin-top:10px;color:var(--muted);font-size:13px;line-height:1.55;border-left:2px solid var(--accent);padding-left:12px}
+  .panel .body{margin-top:16px;line-height:1.65;color:#d7dcec;font-size:15px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}
+  .card{display:block;text-decoration:none;color:inherit;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;
+    transition:transform .2s,border-color .2s,background .2s}
+  .card:hover{transform:translateY(-3px);border-color:var(--accent);background:var(--accent-soft)}
+  .card h3{font-size:14.5px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+  .card h3 .arrow{color:var(--accent)}
+  .card p{margin-top:6px;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .card .stack{margin-top:9px;font-size:10.5px;letter-spacing:.4px;color:var(--accent);text-transform:uppercase}
+  .contact-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+  .contact-row a{text-decoration:none;color:var(--text);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;
+    transition:border-color .2s,background .2s,transform .2s}
+  .contact-row a:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-2px)}
+  @media(max-width:560px){.cards{grid-template-columns:1fr}.brand .role,.links{display:none}}
+
+  .hint{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:var(--muted);font-size:11.5px;letter-spacing:.4px;z-index:20;pointer-events:none}
+  .hint b{color:var(--accent);font-weight:600}
+  #tip{position:fixed;z-index:30;pointer-events:none;background:rgba(0,0,0,.7);border:1px solid var(--accent-soft);color:var(--text);
+    font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;opacity:0;transform:translate(-50%,-140%);transition:opacity .15s;backdrop-filter:blur(4px);white-space:nowrap}
+
+  /* hover preview card (hub) */
+  #preview{position:fixed;z-index:32;pointer-events:none;max-width:230px;opacity:0;
+    transform:translate(-50%,-118%) scale(.96);transition:opacity .18s ease,transform .18s ease;
+    background:linear-gradient(160deg,rgba(16,19,32,.92),rgba(8,10,18,.92));backdrop-filter:blur(10px);
+    border:1px solid var(--pv,rgba(255,255,255,.2));border-radius:14px;padding:12px 14px;
+    box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  #preview.show{opacity:1;transform:translate(-50%,-128%) scale(1)}
+  #preview .pv-name{font-size:15px;font-weight:800;letter-spacing:.2px;color:var(--pv,#fff)}
+  #preview .pv-blurb{margin-top:5px;font-size:12.5px;line-height:1.45;color:#cfd5e6}
+  #preview .pv-cta{margin-top:9px;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--pv,#fff);opacity:.9}
+
+  /* 2D "inside the cell" detail view — molecule backdrop in the NT color */
+  #inside{position:fixed;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .55s ease;overflow:hidden;
+    background:radial-gradient(120% 130% at 50% 20%, var(--nt-1,#12203a), var(--nt-0,#05070e) 78%)}
+  #inside.show{opacity:1;pointer-events:auto}
+  #inside .mol{position:absolute;color:var(--nt-line,#fff);opacity:.13;pointer-events:none;filter:drop-shadow(0 0 20px var(--nt-glow,transparent))}
+  #inside .mol svg{width:100%;height:100%;display:block}
+  #inside .mol.m1{width:min(58vmin,460px);height:min(58vmin,460px);top:-6%;left:-5%;animation:drift1 30s ease-in-out infinite}
+  #inside .mol.m2{width:min(80vmin,660px);height:min(80vmin,660px);bottom:-12%;right:-8%;opacity:.09;animation:drift2 38s ease-in-out infinite}
+  #inside .mol.m3{width:min(34vmin,240px);height:min(34vmin,240px);top:12%;right:14%;opacity:.10;animation:drift1 24s ease-in-out infinite reverse}
+  @keyframes drift1{0%,100%{transform:translate(0,0) rotate(0deg)}50%{transform:translate(3%,5%) rotate(8deg)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0) rotate(0deg)}50%{transform:translate(-4%,-3%) rotate(-6deg)}}
+  #inside .inside-scroll{position:relative;z-index:2;max-height:100vh;width:100%;display:flex;justify-content:center;overflow-y:auto;padding:60px 16px}
+
+  /* warp / hyperspace transition overlay */
+  #warp{position:fixed;inset:0;z-index:28;pointer-events:none}
+
+  /* back (X) button — inside a section */
+  #back{position:fixed;top:18px;right:20px;z-index:35;width:46px;height:46px;border-radius:50%;
+    display:grid;place-items:center;cursor:pointer;font-size:20px;font-weight:700;color:var(--text);
+    background:rgba(16,19,32,.6);border:1px solid var(--accent-soft);backdrop-filter:blur(8px);
+    opacity:0;pointer-events:none;transform:scale(.85);transition:opacity .3s ease,transform .3s ease,border-color .3s,background .3s}
+  #back.show{opacity:1;pointer-events:auto;transform:scale(1)}
+  #back:hover{border-color:var(--accent);background:var(--accent-soft);transform:scale(1.08)}
+  #back .lbl{position:absolute;right:54px;white-space:nowrap;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);
+    opacity:0;transition:opacity .2s}
+  #back:hover .lbl{opacity:1}
+  ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px}
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <canvas id="warp"></canvas>
+
+  <!-- custom cursor: white-gloved scientist hand + magnifying glass on hover -->
+  <div id="cursor">
+    <svg class="hand" width="42" height="52" viewBox="0 0 48 60" fill="none">
+      <g transform="rotate(-30 24 32)" stroke="#141414" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <!-- sleeve / cuff -->
+        <path d="M12 47 h24 v6 a4 4 0 0 1-4 4 H16 a4 4 0 0 1-4-4 Z" fill="#9aa0a8"/>
+        <rect x="12" y="45.5" width="24" height="4.5" rx="1.5" fill="#c7ccd3" stroke="none"/>
+        <!-- palm + folded fingers -->
+        <path d="M13 25 v-1 a3 3 0 0 1 6 0 v-4 a3 3 0 0 1 6 0 v2 a3 3 0 0 1 6 0 v2 a3 3 0 0 1 6 0 v11 a13 13 0 0 1-13 13 h-1 a13 13 0 0 1-13-13 v-9 a3 3 0 0 1 3-3 Z" fill="#f1c9a5"/>
+        <!-- thumb -->
+        <path d="M13 33 l-5-4 a3.2 3.2 0 0 1 3-5.4 l4 2.6 Z" fill="#f5d1ac"/>
+        <!-- index finger -->
+        <path d="M13 25 V7 a3.5 3.5 0 0 1 7 0 v18 Z" fill="#f6d3af"/>
+        <!-- nail hint -->
+        <path d="M15 9.5 a2 2 0 0 1 3 0" stroke="#d9a878" stroke-width="1.5" fill="none"/>
+      </g>
+    </svg>
+    <svg class="glass" width="26" height="26" viewBox="0 0 32 32" fill="none">
+      <circle cx="13" cy="13" r="8.5" fill="rgba(255,255,255,.14)" stroke="#ffffff" stroke-width="2.4"/>
+      <circle cx="13" cy="13" r="8.5" fill="none" stroke="var(--accent)" stroke-width="1.2" opacity=".7"/>
+      <path d="M12 8.5a4.5 4.5 0 0 0-3.5 3.5" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
+      <line x1="19.5" y1="19.5" x2="27" y2="27" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div id="loader">entering the cell…</div>
+  <div id="tip"></div>
+  <div id="preview"><div class="pv-name"></div><div class="pv-blurb"></div><div class="pv-cta">click to dive in ▸</div></div>
+  <button id="back" aria-label="Back to the brain"><span class="lbl">back to the brain</span>✕</button>
+
+  <div id="intro">
+    <h1>Inside the Cell</h1>
+    <p class="sub">An interactive portfolio set inside a neuron. Click a neurotransmitter and dive into that region of the cell to see the work. Drag to look around.</p>
+    <div class="cta">click anywhere to enter ▸</div>
+  </div>
+
+  <div id="ui">
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <span class="name">Jaed Pizarro</span>
+        <span class="role">CS × Neuroscience</span>
+      </div>
+      <nav class="links">
+        <a href="https://github.com/Jaed256" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.linkedin.com/in/jaedpizarro" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="mailto:jaedpizarro@gmail.com">Email</a>
+      </nav>
+    </header>
+    <div class="selector" id="selector"></div>
+  </div>
+
+  <!-- 2D detail view: appears when you dive into a neurotransmitter -->
+  <div id="inside">
+    <div class="mol m1" id="mol1"></div>
+    <div class="mol m2" id="mol2"></div>
+    <div class="mol m3" id="mol3"></div>
+    <div class="inside-scroll"><div class="panel" id="panel"></div></div>
+  </div>
+
+  <div class="hint" id="hint" style="opacity:0">hover a <b>neurotransmitter</b> to preview · click to dive in · drag to look around</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =====================================================================
+   NEUROTRANSMITTER DATA  — edit freely, the site rebuilds from this.
+   Tell me what you want in each section and I'll drop it in here.
+====================================================================== */
+const NTS = {
+  dopamine:{
+    label:"Dopamine", color:"#ffc247",
+    fact:"Dopamine drives motivation and reward — the signal that says 'this is worth building.'",
+    blurb:"My motivation engine — the stuff I build just for the hit of shipping it.",
+    tag:"Drive · Projects", heading:"Things I've built",
+    body:"I build to learn. Done beats perfect — each of these shipped, taught me something, and got better from feedback.",
+    cards:[
+      {title:"FitFindr",desc:"A matcher app built in a hackathon sprint.",stack:"Python · API",url:"https://github.com/Jaed256/FitFindr"},
+      {title:"TakeMeter",desc:"Turns a habit into a measurable signal.",stack:"Python",url:"https://github.com/Jaed256/TakeMeter"},
+      {title:"SEACE IA",desc:"Public-tender intelligence pipeline with n8n + AI.",stack:"n8n · AI",url:"https://github.com/Jaed256/seace_ia_producto"},
+      {title:"305 HackShells",desc:"12-hour hybrid hackathon I organize in Miami.",stack:"Events",url:"https://github.com/Jaed256"}
+    ]
+  },
+  glutamate:{
+    label:"Glutamate", color:"#ff5d6c",
+    fact:"Glutamate is the brain's main excitatory signal — it fires the networks that do the heavy computation.",
+    blurb:"Full send. My excitatory signal — where the research brain fires up.",
+    tag:"Excitation · Research", heading:"Research",
+    body:"My north star is a PhD at the intersection of computer science and neuroscience — technology that helps people understand and heal the brain.",
+    cards:[
+      {title:"Molecular Dynamics @ FIU",desc:"Computational simulation of biological systems (Dr. Prem Chapagain, Physics).",stack:"Simulation",url:""},
+      {title:"Computational Neuro",desc:"Independent study of neural mechanisms, cognition & pharmacology.",stack:"Neuro · Modeling",url:""}
+    ]
+  },
+  acetylcholine:{
+    label:"Acetylcholine", color:"#9b8cff",
+    fact:"Acetylcholine tunes attention and memory — the neurochemistry of learning something new.",
+    blurb:"Focus mode — how I actually learn things and make them stick.",
+    tag:"Focus · Learning", heading:"How I learn",
+    body:"I keep a self-built curriculum across CS and neuroscience, and I document it as I go — because showing the work is part of the work.",
+    cards:[
+      {title:"AI201 — Unofficial Guide",desc:"A learner-made guide to make an AI course approachable.",stack:"AI · Teaching",url:"https://github.com/Jaed256/AI201-unofficial-guide"},
+      {title:"Web Dev Workshops",desc:"Weekly web-dev workshop I teach at a campus club.",stack:"Teaching",url:""}
+    ]
+  },
+  serotonin:{
+    label:"Serotonin", color:"#3ec7a5",
+    fact:"Serotonin steadies mood and balance — the baseline that keeps the whole system healthy.",
+    blurb:"The balance — who I am when I'm not glued to a screen.",
+    tag:"Balance · The Person", heading:"Beyond the code",
+    body:"Undergrad at FIU, headed toward research. Away from the screen I play guitar and piano, read widely, and try to work sustainably instead of just intensely. Leadership over control; depth over noise.",
+    cards:[
+      {title:"Music",desc:"Guitar & piano — one song, start to finish, clean.",stack:"Guitar · Piano",url:""},
+      {title:"Community",desc:"VP of campus tech orgs; I build rooms where people build.",stack:"Leadership",url:""}
+    ]
+  },
+  gaba:{
+    label:"GABA", color:"#4da3ff",
+    fact:"GABA is the brain's calm — the inhibitory signal that filters noise so the real message gets through.",
+    blurb:"The calm signal — cuts the noise. This is how you reach me.",
+    tag:"Signal · Contact", heading:"Let's connect",
+    body:"Building something at the edge of CS and neuroscience, or just want to talk shop? Cut through the noise and reach me directly.",
+    cards:[],
+    contacts:[
+      {label:"Email",url:"mailto:jaedpizarro@gmail.com"},
+      {label:"GitHub",url:"https://github.com/Jaed256"},
+      {label:"LinkedIn",url:"https://www.linkedin.com/in/jaedpizarro"}
+    ]
+  }
+};
+const ORDER = ["dopamine","glutamate","acetylcholine","serotonin","gaba"];
+let current = "dopamine";
+
+function hexToRgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+function applyTheme(key){
+  const c=NTS[key].color, r=document.documentElement.style;
+  r.setProperty("--accent",c);r.setProperty("--accent-soft",hexToRgba(c,.15));r.setProperty("--accent-glow",hexToRgba(c,.55));
+}
+function darken(hex,f){const n=parseInt(hex.slice(1),16);return `rgb(${Math.round(((n>>16)&255)*f)},${Math.round(((n>>8)&255)*f)},${Math.round((n&255)*f)})`;}
+
+/* skeletal molecule drawings used as the 2D backdrop for each neurotransmitter */
+function hexPts(cx,cy,r){let s='';for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-90);s+=`${(cx+r*Math.cos(a)).toFixed(1)},${(cy+r*Math.sin(a)).toFixed(1)} `;}return s.trim();}
+function wrap(inner){return `<svg viewBox="0 0 240 200" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;}
+function T(x,y,s,sz){return `<text x="${x}" y="${y}" fill="currentColor" stroke="none" font-size="${sz||13}" font-family="monospace">${s}</text>`;}
+const MOL = {
+  dopamine: wrap(`<polygon points="${hexPts(72,104,34)}"/><circle cx="72" cy="104" r="20" stroke-width="2" opacity=".55"/>
+    <line x1="42.6" y1="87" x2="20" y2="74"/>${T(2,72,'HO')}<line x1="42.6" y1="121" x2="20" y2="134"/>${T(2,146,'HO')}
+    <polyline points="101.4,121 124,134 148,120 170,133"/>${T(176,142,'NH₂')}`),
+  serotonin: wrap(`<polygon points="${hexPts(64,104,30)}"/><circle cx="64" cy="104" r="18" stroke-width="2" opacity=".55"/>
+    <polygon points="89,88 89,120 118,130 134,104 118,78"/>${T(120,110,'HN',12)}
+    <line x1="38" y1="120" x2="16" y2="132"/>${T(0,146,'HO')}
+    <polyline points="134,104 158,116 180,104"/>${T(184,110,'NH₂')}`),
+  acetylcholine: wrap(`${T(4,116,'⁺N')}<line x1="10" y1="98" x2="20" y2="86"/><line x1="24" y1="112" x2="14" y2="126"/>
+    <polyline points="26,110 52,124 78,110 104,124"/>${T(108,118,'O',14)}
+    <polyline points="120,120 132,104 156,118"/><line x1="132" y1="104" x2="132" y2="82"/>${T(126,78,'O',14)}`),
+  gaba: wrap(`${T(2,116,'H₂N')}<polyline points="40,110 64,124 88,110 112,124 134,111"/>
+    <line x1="134" y1="111" x2="134" y2="88"/>${T(128,84,'O',14)}<line x1="134" y1="111" x2="158" y2="124"/>${T(160,130,'OH')}`),
+  glutamate: wrap(`${T(0,116,'HO₂C')}<polyline points="44,116 66,104 66,104 90,118 112,106"/>
+    <line x1="66" y1="104" x2="66" y2="82"/>${T(58,78,'NH₂')}
+    <polyline points="112,106 134,120 134,120"/><line x1="134" y1="120" x2="134" y2="98"/>${T(128,94,'O',14)}
+    <line x1="134" y1="120" x2="158" y2="132"/>${T(160,138,'OH')}`)
+};
+function setInsideTheme(key){
+  const nt=NTS[key], el=document.getElementById("inside").style;
+  el.setProperty("--nt-0",darken(nt.color,0.08));
+  el.setProperty("--nt-1",darken(nt.color,0.30));
+  el.setProperty("--nt-line",nt.color);
+  el.setProperty("--nt-glow",hexToRgba(nt.color,0.5));
+  const svg=MOL[key]||MOL.dopamine;
+  document.getElementById("mol1").innerHTML=svg;
+  document.getElementById("mol2").innerHTML=svg;
+  document.getElementById("mol3").innerHTML=svg;
+}
+
+/* selector */
+const selector=document.getElementById("selector");
+ORDER.forEach(key=>{
+  const nt=NTS[key];
+  const b=document.createElement("button");
+  b.className="nt"+(key===current?" active":"");
+  b.dataset.key=key;
+  b.innerHTML=`<span class="sw" style="background:${nt.color}"></span>${nt.label}`;
+  b.addEventListener("click",()=>diveIn(key));
+  selector.appendChild(b);
+});
+
+/* panel */
+const panel=document.getElementById("panel");
+function renderPanel(key){
+  const nt=NTS[key];
+  let cards="";
+  if(nt.cards&&nt.cards.length){
+    cards=`<div class="cards">`+nt.cards.map(c=>{
+      const on=c.url&&c.url.length,tag=on?"a":"div";
+      const href=on?`href="${c.url}" target="_blank" rel="noopener"`:"";
+      const ar=on?`<span class="arrow">↗</span>`:`<span class="arrow" style="opacity:.35">•</span>`;
+      return `<${tag} class="card" ${href}><h3>${c.title} ${ar}</h3><p>${c.desc}</p>${c.stack?`<div class="stack">${c.stack}</div>`:""}</${tag}>`;
+    }).join("")+`</div>`;
+  }
+  let contact="";
+  if(nt.contacts){contact=`<div class="contact-row">`+nt.contacts.map(c=>`<a href="${c.url}" ${c.url.startsWith("http")?'target="_blank" rel="noopener"':""}>${c.label}</a>`).join("")+`</div>`;}
+  panel.innerHTML=`<span class="tag"><span class="sw"></span>${nt.tag}</span><h2>${nt.heading}</h2><div class="fact">${nt.fact}</div><div class="body">${nt.body}</div>${cards}${contact}`;
+}
+function showPanel(){panel.classList.add("show");}
+function hidePanel(){panel.classList.remove("show");}
+
+/* =====================================================================
+   THREE.JS SCENE
+====================================================================== */
+const canvas=document.getElementById("scene");
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x03040a,0.013);
+const startColor=new THREE.Color(NTS[current].color);
+const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,400);
+
+/* orbit around a movable target */
+const orbit={theta:0.6, phi:1.35, radius:60, target:new THREE.Vector3(0,0,0)};
+function updateCamera(){
+  const st=Math.sin(orbit.phi);
+  camera.position.set(
+    orbit.target.x+orbit.radius*st*Math.cos(orbit.theta),
+    orbit.target.y+orbit.radius*Math.cos(orbit.phi),
+    orbit.target.z+orbit.radius*st*Math.sin(orbit.theta)
+  );
+  camera.lookAt(orbit.target);
+}
+updateCamera();
+
+/* lights */
+scene.add(new THREE.AmbientLight(0x334466,0.6));
+const coreLight=new THREE.PointLight(startColor.getHex(),2.2,140); scene.add(coreLight);
+const rimLight=new THREE.PointLight(0x5566ff,0.7,180); rimLight.position.set(30,20,-20); scene.add(rimLight);
+
+/* membrane */
+const membraneMat=new THREE.MeshBasicMaterial({color:startColor.clone(),wireframe:true,transparent:true,opacity:0.10,side:THREE.BackSide});
+const membrane=new THREE.Mesh(new THREE.IcosahedronGeometry(46,4),membraneMat); scene.add(membrane);
+const membrane2Mat=new THREE.MeshBasicMaterial({color:startColor.clone(),wireframe:true,transparent:true,opacity:0.05,side:THREE.BackSide});
+const membrane2=new THREE.Mesh(new THREE.IcosahedronGeometry(44,2),membrane2Mat); scene.add(membrane2);
+
+/* brain (central nucleus) — FIXED color, does not change with the neurotransmitter */
+const BRAIN_COLOR=0xe89ab8, BRAIN_WIRE=0x8a4a68;
+function displace(geo,amp){
+  const p=geo.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+    const n=Math.sin(x*3.1+y*2.3)*Math.cos(z*2.7+x*1.6)*0.5+Math.sin(y*4.4+z*3.2)*0.28;
+    const len=Math.sqrt(x*x+y*y+z*z)||1,f=1+(n*amp)/len;
+    p.setXYZ(i,x*f,y*f,z*f);
+  }
+  p.needsUpdate=true;geo.computeVertexNormals();
+}
+const brain=new THREE.Group();
+[-0.62,0.62].forEach(off=>{
+  const g=new THREE.IcosahedronGeometry(2.4,5); displace(g,0.55);
+  const solid=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:BRAIN_COLOR,transparent:true,opacity:0.95}));
+  solid.position.x=off;
+  const wire=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:BRAIN_WIRE,wireframe:true,transparent:true,opacity:0.45}));
+  wire.position.x=off; wire.scale.setScalar(1.012);
+  brain.add(solid); brain.add(wire);
+});
+const brainHalo=new THREE.Mesh(new THREE.SphereGeometry(5.2,24,24),
+  new THREE.MeshBasicMaterial({color:BRAIN_COLOR,transparent:true,opacity:0.08,side:THREE.BackSide}));
+brain.add(brainHalo);
+scene.add(brain);
+
+const CENTER=new THREE.Vector3(0,0,0);
+/* per-node dashed signal lines + small travelling pulses are built AFTER the nodes exist */
+
+/* molecule clouds */
+function makeCloud(count,spread,size){
+  const g=new THREE.BufferGeometry(),pos=new Float32Array(count*3);
+  for(let i=0;i<count;i++){
+    const r=6+Math.random()*spread,a=Math.random()*Math.PI*2,b=Math.acos(2*Math.random()-1);
+    pos[i*3]=r*Math.sin(b)*Math.cos(a);pos[i*3+1]=r*Math.cos(b);pos[i*3+2]=r*Math.sin(b)*Math.sin(a);
+  }
+  g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  const m=new THREE.PointsMaterial({color:startColor.clone(),size,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+  return new THREE.Points(g,m);
+}
+const cloudA=makeCloud(900,30,0.55),cloudB=makeCloud(500,20,0.9);
+scene.add(cloudA);scene.add(cloudB);
+
+/* vesicles */
+const vesicles=[],vesGroup=new THREE.Group();scene.add(vesGroup);
+for(let i=0;i<14;i++){
+  const s=0.5+Math.random()*1.1;
+  const m=new THREE.Mesh(new THREE.SphereGeometry(s,18,18),new THREE.MeshBasicMaterial({color:startColor.clone(),transparent:true,opacity:0.55,blending:THREE.AdditiveBlending}));
+  const a=Math.random()*Math.PI*2,b=Math.acos(2*Math.random()-1),r=9+Math.random()*8;
+  m.position.set(r*Math.sin(b)*Math.cos(a),r*Math.cos(b),r*Math.sin(b)*Math.sin(a));
+  m.userData.spin=(Math.random()-.5)*0.01;vesGroup.add(m);vesicles.push(m);
+}
+
+/* receptor nodes — one per NT, spread around the cell */
+const nodes=[],nodeGroup=new THREE.Group();scene.add(nodeGroup);
+ORDER.forEach((key,i)=>{
+  const col=new THREE.Color(NTS[key].color);
+  const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1.3,1),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:1}));
+  const ang=(i/ORDER.length)*Math.PI*2;
+  m.position.set(Math.cos(ang)*16, Math.sin(ang*1.7)*7, Math.sin(ang)*16);
+  const shell=new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.22,blending:THREE.AdditiveBlending}));
+  m.add(shell);
+  // modest invisible hit-zone — easy to click, not oversized
+  const hit=new THREE.Mesh(new THREE.SphereGeometry(2.1,10,10),new THREE.MeshBasicMaterial({visible:false}));
+  m.add(hit);
+  m.userData={key,base:m.position.clone(),phase:Math.random()*6,shell,h:0};
+  nodeGroup.add(m);nodes.push(m);
+});
+/* walk up from a raycast hit to the owning receptor node */
+function nodeFromHit(obj){ while(obj){ if(obj.userData&&obj.userData.key) return obj; obj=obj.parent; } return null; }
+
+/* dashed signal lines (each neurotransmitter -> brain), always visible, small pulses */
+const signals=[];
+nodes.forEach(n=>{
+  const p=n.userData.base, col=new THREE.Color(NTS[n.userData.key].color);
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.BufferAttribute(new Float32Array([p.x,p.y,p.z,0,0,0]),3));
+  const mat=new THREE.LineDashedMaterial({color:col.clone(),dashSize:0.45,gapSize:0.35,transparent:true,opacity:0.38});
+  const line=new THREE.Line(g,mat); line.computeLineDistances(); scene.add(line);
+  const pcs=[];
+  for(let i=0;i<4;i++){
+    const pm=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8),
+      new THREE.MeshBasicMaterial({color:col.clone(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    pm.userData.off=i/4; scene.add(pm); pcs.push(pm);
+  }
+  signals.push({from:p.clone(),line,mat,pulses:pcs,key:n.userData.key});
+});
+
+/* =====================================================================
+   CAMERA TWEEN (fly-to)
+====================================================================== */
+let tween=null, autoRotate=true, idleTimer=null;
+function easeInOut(k){return k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;}
+function startTween(to,dur,onDone){
+  let dt=to.theta-orbit.theta; while(dt>Math.PI)dt-=2*Math.PI; while(dt<-Math.PI)dt+=2*Math.PI;
+  tween={from:{theta:orbit.theta,phi:orbit.phi,radius:orbit.radius,target:orbit.target.clone()},to,dt,dur,t0:performance.now(),onDone};
+}
+function cancelTween(){ if(tween){const cb=tween.onDone;tween=null;if(cb)cb();} }
+function easeIn(k){return k*k*k;}
+
+/* =====================================================================
+   WARP / HYPERSPACE overlay — light-beam streaks + white flash
+====================================================================== */
+const warpCanvas=document.getElementById("warp"), wx=warpCanvas.getContext("2d");
+function sizeWarp(){warpCanvas.width=innerWidth;warpCanvas.height=innerHeight;}
+sizeWarp(); addEventListener("resize",sizeWarp);
+const STREAKS=[];
+for(let i=0;i<170;i++){STREAKS.push({a:Math.random()*Math.PI*2, r:0.05+Math.random()*0.55, len:0.2+Math.random()*0.6, w:0.6+Math.random()*2.0, white:Math.random()<0.5});}
+let warp={active:false};
+function startWarp(dir,dur,onFlash){
+  warp={active:true,t0:performance.now(),dur,dir,onFlash,fired:false,flashAt:dir>0?0.72:0.30,color:NTS[current].color};
+}
+function drawWarp(){
+  if(!warp.active)return;
+  const W=warpCanvas.width,H=warpCanvas.height,cx=W/2,cy=H/2,maxR=Math.hypot(cx,cy);
+  let p=(performance.now()-warp.t0)/warp.dur; if(p>1)p=1;
+  const dir=warp.dir, expand=dir>0?easeIn(p):easeIn(1-p);
+  wx.clearRect(0,0,W,H);
+  // 1) neurotransmitter-color wash — hides the 3D scene as we accelerate (no more peeking at the brain)
+  wx.globalCompositeOperation="source-over";
+  const wash=Math.min(expand*1.35,1)*0.92;
+  const wg=wx.createRadialGradient(cx,cy,0,cx,cy,maxR);
+  wg.addColorStop(0,hexToRgba(warp.color,wash*0.55));
+  wg.addColorStop(1,hexToRgba(warp.color,wash));
+  wx.fillStyle=wg; wx.fillRect(0,0,W,H);
+  // 2) light-beam streaks (white + neurotransmitter color)
+  wx.globalCompositeOperation="lighter"; wx.lineCap="round";
+  const rot=(dir>0?p:-p)*0.7;
+  for(const s of STREAKS){
+    const ang=s.a+rot;
+    const base=(s.r*(0.12+expand))*maxR;
+    const tip=((s.r+s.len*expand*1.8))*maxR;
+    const a=Math.min(expand*1.3,1)*0.9;
+    wx.strokeStyle=s.white?`rgba(255,255,255,${a})`:hexToRgba(warp.color,a);
+    wx.lineWidth=s.w*(0.5+expand*2.6);
+    wx.beginPath();
+    wx.moveTo(cx+Math.cos(ang)*base,cy+Math.sin(ang)*base);
+    wx.lineTo(cx+Math.cos(ang)*tip,cy+Math.sin(ang)*tip);
+    wx.stroke();
+  }
+  // 3) flash: white core melting into the neurotransmitter color
+  wx.globalCompositeOperation="source-over";
+  const fd=1-Math.min(Math.abs(p-warp.flashAt)/0.34,1);
+  if(fd>0){
+    const g=wx.createRadialGradient(cx,cy,0,cx,cy,maxR);
+    g.addColorStop(0,`rgba(255,255,255,${fd})`);
+    g.addColorStop(0.45,`rgba(255,255,255,${fd*0.9})`);
+    g.addColorStop(0.8,hexToRgba(warp.color,fd*0.9));
+    g.addColorStop(1,hexToRgba(warp.color,0));
+    wx.fillStyle=g; wx.fillRect(0,0,W,H);
+  }
+  if(!warp.fired && p>=warp.flashAt){ warp.fired=true; if(warp.onFlash)warp.onFlash(); }
+  if(p>=1){ warp.active=false; wx.clearRect(0,0,W,H); }
+}
+
+/* =====================================================================
+   STATE MACHINE:  hub  <->  inside(section)
+====================================================================== */
+const NEUTRAL=new THREE.Color(0x5563a0);
+let colorTarget=NEUTRAL.clone(), flash=0;
+let mode="hub", hovered=null, locked=false;
+let nodeAlpha=1, nodeAlphaTarget=1;
+const backBtn=document.getElementById("back"), preview=document.getElementById("preview");
+const pvName=preview.querySelector(".pv-name"), pvBlurb=preview.querySelector(".pv-blurb");
+const cursorEl=document.getElementById("cursor");
+function showPreview(key,x,y){
+  const nt=NTS[key];
+  preview.style.setProperty("--pv",nt.color);
+  pvName.textContent=nt.label; pvBlurb.textContent=nt.blurb||"";
+  preview.style.left=x+"px"; preview.style.top=y+"px"; preview.classList.add("show");
+}
+function hidePreview(){ preview.classList.remove("show"); }
+
+function flyToHub(onDone){ startTween({theta:orbit.theta, phi:1.3, radius:36, target:new THREE.Vector3(0,0,0)}, 1400, onDone); }
+
+/* every transition gets a generation id; stale callbacks/timers from an
+   older transition check it and no-op, so they can never re-show the 2D
+   overlay or leave the view locked. */
+let gen=0, safety=[];
+function clearSafety(){ safety.forEach(clearTimeout); safety=[]; }
+
+function arriveInside(key){
+  if(mode==="inside")return;
+  mode="inside"; nodeAlphaTarget=0;              // stays LOCKED until the dive fully lands
+  document.getElementById("inside").classList.add("show");
+  document.getElementById("ui").classList.remove("on");
+  renderPanel(key); showPanel(); backBtn.classList.add("show");
+}
+function arriveHub(g){
+  if(mode==="hub")return;
+  mode="hub";                                     // stays LOCKED until the glide-out finishes
+  document.getElementById("inside").classList.remove("show");
+  hidePanel();                                    // drop the panel's pointer-events (invisible click-eater)
+  document.getElementById("ui").classList.add("on");
+  document.querySelectorAll(".nt").forEach(b=>b.classList.remove("active"));
+  backBtn.classList.remove("show");
+  colorTarget=NEUTRAL.clone(); nodeAlphaTarget=1;
+  // fly all the way back out to the wide "whole system" framing, recentred on the brain
+  startTween({theta:orbit.theta, phi:1.3, radius:36, target:new THREE.Vector3(0,0,0)}, 1300, ()=>{ if(g===gen) locked=false; });
+  clearTimeout(idleTimer); idleTimer=setTimeout(()=>{autoRotate=true;},1600);
+}
+
+function diveIn(key){
+  if(mode!=="hub"||locked)return;                 // only from the hub, not mid-warp
+  const g=++gen; clearSafety();
+  locked=true; current=key; mode="warp"; hovered=null; hidePreview(); cursorEl.classList.remove("look");
+  applyTheme(key); colorTarget=new THREE.Color(NTS[key].color);
+  document.querySelectorAll(".nt").forEach(b=>b.classList.toggle("active",b.dataset.key===key));
+  setInsideTheme(key);
+  hidePanel(); backBtn.classList.remove("show");
+  document.getElementById("hint").style.opacity=0;
+  flash=1; autoRotate=false; clearTimeout(idleTimer);
+  const node=nodes.find(n=>n.userData.key===key), p=node.userData.base, dir=p.clone().normalize();
+  const aimTheta=Math.atan2(dir.z,dir.x), aimPhi=Math.max(.5,Math.min(2.64,Math.acos(dir.y)+0.05));
+  // 1) wind up: aim + pull back   2) warp in   3) unlock only when the camera has fully landed
+  startTween({theta:aimTheta, phi:aimPhi, radius:orbit.radius+4.5, target:p.clone()}, 650, ()=>{
+    if(g!==gen)return;
+    startWarp(1,1050,()=>{ if(g===gen) arriveInside(key); });
+    startTween({theta:aimTheta, phi:aimPhi, radius:1.2, target:p.clone()}, 1050, ()=>{ if(g===gen) locked=false; });
+  });
+  safety.push(setTimeout(()=>{ if(g===gen){ arriveInside(key); locked=false; } }, 2400));
+}
+function backToHub(){
+  if(mode!=="inside"||locked)return;
+  const g=++gen; clearSafety();
+  locked=true; mode="warp"; flash=1;
+  startWarp(-1,1050,()=>{ if(g===gen) arriveHub(g); });   // flash covers the swap
+  safety.push(setTimeout(()=>{ if(g===gen) arriveHub(g); }, 1400));
+  safety.push(setTimeout(()=>{ if(g===gen) locked=false; }, 3200));
+}
+backBtn.addEventListener("click",backToHub);
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&mode==="inside") backToHub(); });
+
+/* =====================================================================
+   INTERACTION
+====================================================================== */
+let dragging=false,lastX=0,lastY=0,moved=0;
+const ndc=new THREE.Vector2(9,9),raycaster=new THREE.Raycaster();
+function setNDC(e){const x=e.clientX,y=e.clientY;ndc.x=(x/innerWidth)*2-1;ndc.y=-(y/innerHeight)*2+1;return{x,y};}
+function pickNode(){ raycaster.setFromCamera(ndc,camera); const hit=raycaster.intersectObjects(nodes,true)[0]; return hit?nodeFromHit(hit.object):null; }
+// custom gloved-hand cursor tracking + states
+window.addEventListener("pointermove",e=>{
+  cursorEl.style.transform=`translate(${e.clientX}px,${e.clientY}px)`;
+  cursorEl.classList.add("on");                 // glove shows everywhere, including the intro
+},{passive:true});
+window.addEventListener("pointerdown",()=>cursorEl.classList.add("grab"));
+window.addEventListener("pointerup",()=>cursorEl.classList.remove("grab"));
+// hide the cursor only when the mouse leaves the page / window loses focus
+document.addEventListener("mouseleave",()=>cursorEl.classList.remove("on"));
+document.addEventListener("mouseenter",()=>cursorEl.classList.add("on"));
+window.addEventListener("blur",()=>cursorEl.classList.remove("on"));
+
+canvas.addEventListener("pointerdown",e=>{ if(locked)return; tween=null; dragging=true;moved=0;lastX=e.clientX;lastY=e.clientY;cursorEl.classList.remove("look");clearTimeout(idleTimer);autoRotate=false; });
+window.addEventListener("pointerup",e=>{
+  if(dragging&&moved<6&&started){
+    setNDC(e);
+    const node=pickNode();
+    if(node&&mode==="hub") diveIn(node.userData.key);
+    else if(mode==="hub"){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{autoRotate=true;},6000); }
+  } else if(dragging){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{autoRotate=true;},6000); }
+  dragging=false;
+});
+window.addEventListener("pointermove",e=>{
+  const p=setNDC(e);
+  if(dragging){
+    const dx=e.clientX-lastX,dy=e.clientY-lastY;moved+=Math.abs(dx)+Math.abs(dy);
+    orbit.theta-=dx*0.005;orbit.phi=Math.max(0.35,Math.min(Math.PI-0.35,orbit.phi-dy*0.005));
+    lastX=e.clientX;lastY=e.clientY;
+  } else if(started&&mode==="hub"&&!locked){
+    const node=pickNode();
+    if(node){ hovered=node; cursorEl.classList.add("look"); showPreview(node.userData.key,p.x,p.y); }
+    else{ hovered=null; cursorEl.classList.remove("look"); hidePreview(); }
+  }
+});
+// mouse-wheel zoom is intentionally disabled — the framing stays fixed
+canvas.addEventListener("wheel",e=>{e.preventDefault();},{passive:false});
+
+/* =====================================================================
+   INTRO -> ENTER
+====================================================================== */
+const intro=document.getElementById("intro"),ui=document.getElementById("ui"),hint=document.getElementById("hint");
+let started=false;
+function enter(){
+  if(started)return;started=true;
+  cursorEl.classList.add("on");                 // glove appears now (was hidden on the intro)
+  intro.classList.add("hidden");ui.classList.add("on");
+  hint.style.transition="opacity 1s ease";hint.style.opacity=1;setTimeout(()=>{hint.style.opacity=0;},9000);
+  mode="hub"; nodeAlphaTarget=1; colorTarget=NEUTRAL.clone(); autoRotate=false;
+  flyToHub(()=>{ idleTimer=setTimeout(()=>{autoRotate=true;},1500); });  // cinematic fly-in to the hub
+}
+intro.addEventListener("click",enter);
+document.addEventListener("keydown",e=>{if(!started&&(e.key==="Enter"||e.key===" "))enter();});
+applyTheme(current);
+
+/* =====================================================================
+   RESIZE + ANIMATE
+====================================================================== */
+addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+const cur=new THREE.Color(NTS[current].color),clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+
+  if(tween){
+    const k=Math.min((performance.now()-tween.t0)/tween.dur,1),e=easeInOut(k);
+    orbit.theta=tween.from.theta+tween.dt*e;
+    orbit.phi=tween.from.phi+(tween.to.phi-tween.from.phi)*e;
+    orbit.radius=tween.from.radius+(tween.to.radius-tween.from.radius)*e;
+    orbit.target.lerpVectors(tween.from.target,tween.to.target,e);
+    if(k>=1){const cb=tween.onDone;tween=null;if(cb)cb();}
+  } else if(autoRotate){ orbit.theta+=0.0011; }
+  updateCamera();
+
+  // NT color drives everything EXCEPT the brain (which stays fixed)
+  cur.lerp(colorTarget,0.05);
+  coreLight.color.copy(cur);
+  membraneMat.color.copy(cur);membrane2Mat.color.copy(cur);
+  cloudA.material.color.copy(cur);cloudB.material.color.copy(cur);
+  vesicles.forEach(v=>v.material.color.copy(cur));
+
+  if(flash>0){flash*=0.92;if(flash<0.01)flash=0;}
+  coreLight.intensity=2.2+flash*7;
+  cloudA.material.size=0.55+flash*0.7;
+
+  // brain: constant color, gentle breathing + slow rotation
+  const bpulse=1+Math.sin(t*1.3)*0.04+flash*0.18;
+  brain.scale.setScalar(bpulse);
+  brain.rotation.y=t*0.12;
+
+  // dashed signal lines: always on, each neurotransmitter firing into the brain
+  const inHub=(mode==="hub");
+  signals.forEach(sig=>{
+    const on = inHub || sig.key===current;   // hub shows all; inside keeps the active one
+    sig.line.visible=on;
+    sig.mat.opacity = inHub ? 0.30 : 0.5;
+    sig.pulses.forEach(pp=>{
+      pp.visible=on;
+      const f=(t*0.5+pp.userData.off)%1;
+      pp.position.lerpVectors(sig.from,CENTER,f);
+      const fade=Math.sin(f*Math.PI);
+      pp.material.opacity=fade*(0.8+flash*0.5);
+      pp.scale.setScalar(0.5+fade*0.7+flash*0.5);
+    });
+  });
+
+  membrane.rotation.y=t*0.02;membrane.rotation.x=t*0.01;membrane2.rotation.y=-t*0.015;
+  cloudA.rotation.y=t*0.03;cloudA.rotation.x=t*0.012;cloudB.rotation.y=-t*0.045;cloudB.rotation.z=t*0.02;
+  vesGroup.rotation.y=t*0.05;
+  vesicles.forEach(v=>{v.rotation.y+=v.userData.spin;v.material.opacity=0.4+Math.sin(t*2+v.position.x)*0.2;});
+
+  // receptor nodes: hover-grow in hub, dissolve when inside
+  nodeAlpha+=(nodeAlphaTarget-nodeAlpha)*0.12;
+  nodes.forEach(n=>{
+    n.rotation.y+=0.01;n.rotation.x+=0.006;
+    const b=n.userData.base;n.position.y=b.y+Math.sin(t*1.2+n.userData.phase)*0.6;
+    n.userData.h+=(((mode==="hub"&&hovered===n)?1:0)-n.userData.h)*0.15;
+    const s=(1+Math.sin(t*2+n.userData.phase)*0.06)*(1+n.userData.h*0.6);
+    n.scale.setScalar(s);
+    n.material.opacity=nodeAlpha;
+    n.userData.shell.material.opacity=0.22*nodeAlpha*(0.6+n.userData.h*0.9);
+    n.visible=nodeAlpha>0.02;
+  });
+
+  renderer.render(scene,camera);
+  drawWarp();
+}
+window.addEventListener("load",()=>{document.getElementById("loader").classList.add("hidden");});
+animate();
+</script>
+</body>
+</html>
