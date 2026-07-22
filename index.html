@@ -273,6 +273,13 @@ const NTS = {
 const ORDER = ["dopamine","glutamate","acetylcholine","serotonin","gaba"];
 let current = "dopamine";
 
+/* deter right-click "Inspect" and the usual devtools shortcuts (a deterrent, not real security) */
+document.addEventListener("contextmenu",e=>e.preventDefault());
+document.addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(e.key==="F12" || (e.ctrlKey&&e.shiftKey&&(k==="i"||k==="j"||k==="c")) || (e.ctrlKey&&k==="u")) e.preventDefault();
+});
+
 function hexToRgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
 function applyTheme(key){
   const c=NTS[key].color, r=document.documentElement.style;
