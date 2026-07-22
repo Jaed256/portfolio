@@ -13,7 +13,7 @@
     --text:#eef1fa;
     --muted:#9aa3bb;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
   html,body{height:100%;overflow:hidden}
   body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:#03040a;color:var(--text);-webkit-font-smoothing:antialiased}
   #scene{position:fixed;inset:0;z-index:0;display:block;touch-action:none}
@@ -275,6 +275,8 @@ let current = "dopamine";
 
 /* deter right-click "Inspect" and the usual devtools shortcuts (a deterrent, not real security) */
 document.addEventListener("contextmenu",e=>e.preventDefault());
+document.addEventListener("selectstart",e=>e.preventDefault());   // no left-click text highlighting
+document.addEventListener("dragstart",e=>e.preventDefault());
 document.addEventListener("keydown",e=>{
   const k=e.key.toLowerCase();
   if(e.key==="F12" || (e.ctrlKey&&e.shiftKey&&(k==="i"||k==="j"||k==="c")) || (e.ctrlKey&&k==="u")) e.preventDefault();
