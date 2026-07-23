@@ -109,10 +109,15 @@
   #preview .pv-cta{margin-top:9px;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--pv,#fff);opacity:.9}
 
   /* 2D "inside the cell" detail view — molecule backdrop in the NT color */
-  #inside{position:fixed;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;
-    opacity:0;pointer-events:none;transition:opacity .55s ease;overflow:hidden;
+  #inside{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .25s ease;overflow:hidden;
+    transform-origin:50% 50%;will-change:transform,opacity;
     background:radial-gradient(120% 130% at 50% 20%, var(--nt-1,#12203a), var(--nt-0,#05070e) 78%)}
   #inside.show{opacity:1;pointer-events:auto}
+  /* the destination flies toward you: a distant dot that scales up until it fills the page.
+     the glow ring makes its edge fuse into the warp beams while it's small/growing */
+  #inside.iris{transition:transform 1.3s cubic-bezier(.42,0,.22,1),border-radius 1.3s ease,opacity .35s ease;
+    box-shadow:0 0 100px 26px rgba(255,255,255,.4), 0 0 44px 10px var(--accent-glow)}
   #inside .mol{position:absolute;color:var(--nt-line,#fff);opacity:.13;pointer-events:none;filter:drop-shadow(0 0 20px var(--nt-glow,transparent))}
   #inside .mol svg{width:100%;height:100%;display:block}
   #inside .mol.m1{width:min(58vmin,460px);height:min(58vmin,460px);top:-6%;left:-5%;animation:drift1 30s ease-in-out infinite}
@@ -508,40 +513,39 @@ function drawWarp(){
   if(!warp.active)return;
   const W=warpCanvas.width,H=warpCanvas.height,cx=W/2,cy=H/2,maxR=Math.hypot(cx,cy);
   let p=(performance.now()-warp.t0)/warp.dur; if(p>1)p=1;
-  const dir=warp.dir, expand=dir>0?easeIn(p):easeIn(1-p);
+  const dir=warp.dir, prog=dir>0?p:1-p;
   wx.clearRect(0,0,W,H);
-  // 1) neurotransmitter-color wash — hides the 3D scene as we accelerate (no more peeking at the brain)
+  // 1) the node flares into a light that grows (bloom), THEN dark space engulfs it
+  const wash=Math.min(Math.max((prog-0.12)/0.28,0),1);   // space fills a beat after the flare
   wx.globalCompositeOperation="source-over";
-  const wash=Math.min(expand*1.35,1)*0.92;
-  const wg=wx.createRadialGradient(cx,cy,0,cx,cy,maxR);
-  wg.addColorStop(0,hexToRgba(warp.color,wash*0.55));
-  wg.addColorStop(1,hexToRgba(warp.color,wash));
-  wx.fillStyle=wg; wx.fillRect(0,0,W,H);
-  // 2) light-beam streaks (white + neurotransmitter color)
+  wx.fillStyle=`rgba(3,4,11,${0.97*wash})`;
+  wx.fillRect(0,0,W,H);
+  // flare — grows OUTWARD from the node when diving in; collapses INWARD to a point when coming out
+  let bi,br;
+  if(dir>0){ bi=Math.max(0,1-prog/0.42); br=(0.05+prog*2.4)*maxR; }
+  else     { bi=Math.sin(Math.min(Math.max(p,0),1)*Math.PI)*0.95; br=(0.04+(1-p)*1.5)*maxR; }
+  if(bi>0){
+    const bg=wx.createRadialGradient(cx,cy,0,cx,cy,Math.max(br,1));
+    bg.addColorStop(0,`rgba(255,255,255,${bi})`);
+    bg.addColorStop(0.35,hexToRgba(warp.color,bi*0.9));
+    bg.addColorStop(1,hexToRgba(warp.color,0));
+    wx.globalCompositeOperation="lighter";
+    wx.fillStyle=bg; wx.fillRect(0,0,W,H);
+  }
+  // 2) light-beam streaks (white + neurotransmitter color) rushing outward — appear AFTER the flare
   wx.globalCompositeOperation="lighter"; wx.lineCap="round";
-  const rot=(dir>0?p:-p)*0.7;
+  const grow=Math.min(Math.max((prog-0.2)/0.42,0),1), rot=(dir>0?p:-p)*0.7;
   for(const s of STREAKS){
     const ang=s.a+rot;
-    const base=(s.r*(0.12+expand))*maxR;
-    const tip=((s.r+s.len*expand*1.8))*maxR;
-    const a=Math.min(expand*1.3,1)*0.9;
+    const base=(s.r*(0.10+grow*0.9))*maxR;
+    const tip=((s.r+s.len*grow*2.0))*maxR;
+    const a=grow*0.9;
     wx.strokeStyle=s.white?`rgba(255,255,255,${a})`:hexToRgba(warp.color,a);
-    wx.lineWidth=s.w*(0.5+expand*2.6);
+    wx.lineWidth=s.w*(0.5+grow*2.6);
     wx.beginPath();
     wx.moveTo(cx+Math.cos(ang)*base,cy+Math.sin(ang)*base);
     wx.lineTo(cx+Math.cos(ang)*tip,cy+Math.sin(ang)*tip);
     wx.stroke();
-  }
-  // 3) flash: white core melting into the neurotransmitter color
-  wx.globalCompositeOperation="source-over";
-  const fd=1-Math.min(Math.abs(p-warp.flashAt)/0.34,1);
-  if(fd>0){
-    const g=wx.createRadialGradient(cx,cy,0,cx,cy,maxR);
-    g.addColorStop(0,`rgba(255,255,255,${fd})`);
-    g.addColorStop(0.45,`rgba(255,255,255,${fd*0.9})`);
-    g.addColorStop(0.8,hexToRgba(warp.color,fd*0.9));
-    g.addColorStop(1,hexToRgba(warp.color,0));
-    wx.fillStyle=g; wx.fillRect(0,0,W,H);
   }
   if(!warp.fired && p>=warp.flashAt){ warp.fired=true; if(warp.onFlash)warp.onFlash(); }
   if(p>=1){ warp.active=false; wx.clearRect(0,0,W,H); }
@@ -565,7 +569,9 @@ function showPreview(key,x,y){
 }
 function hidePreview(){ preview.classList.remove("show"); }
 
-function flyToHub(onDone){ startTween({theta:orbit.theta, phi:1.3, radius:36, target:new THREE.Vector3(0,0,0)}, 1400, onDone); }
+/* the one canonical hub framing — the "Inside the Cell" entry view. back-out returns here too. */
+const HUB_VIEW={theta:0.6, phi:1.28, radius:36};
+function flyToHub(onDone){ startTween({theta:HUB_VIEW.theta, phi:HUB_VIEW.phi, radius:HUB_VIEW.radius, target:new THREE.Vector3(0,0,0)}, 1400, onDone); }
 
 /* every transition gets a generation id; stale callbacks/timers from an
    older transition check it and no-op, so they can never re-show the 2D
@@ -573,29 +579,39 @@ function flyToHub(onDone){ startTween({theta:orbit.theta, phi:1.3, radius:36, ta
 let gen=0, safety=[];
 function clearSafety(){ safety.forEach(clearTimeout); safety=[]; }
 
-function arriveInside(key){
-  if(mode==="inside")return;
-  mode="inside"; nodeAlphaTarget=0;              // stays LOCKED until the dive fully lands
-  document.getElementById("inside").classList.add("show");
+const insideEl=document.getElementById("inside");
+const DOT="scale(0.035)";           // the far-away "dot" state of the destination
+
+/* forward: after the warp, the destination appears as a tiny dot and flies toward
+   you (scales up) over the streaks until it fills the whole page */
+function revealInside(key,g){
+  if(g!==gen||mode==="inside")return;
   document.getElementById("ui").classList.remove("on");
-  renderPanel(key); showPanel(); backBtn.classList.add("show");
+  renderPanel(key);
+  insideEl.classList.remove("iris");
+  insideEl.style.transform=DOT;                    // start tiny (a dot in the distance)
+  insideEl.style.borderRadius="50%";
+  insideEl.classList.add("show"); showPanel();
+  void insideEl.offsetWidth;                        // reflow so the scale-up animates
+  insideEl.classList.add("iris");
+  insideEl.style.transform="scale(1)";              // fly toward you until it fills the page
+  insideEl.style.borderRadius="0px";
+  backBtn.classList.add("show");
 }
-function arriveHub(g){
-  if(mode==="hub")return;
-  mode="hub";                                     // stays LOCKED until the glide-out finishes
-  document.getElementById("inside").classList.remove("show");
-  hidePanel();                                    // drop the panel's pointer-events (invisible click-eater)
-  document.getElementById("ui").classList.add("on");
-  document.querySelectorAll(".nt").forEach(b=>b.classList.remove("active"));
-  backBtn.classList.remove("show");
-  colorTarget=NEUTRAL.clone(); nodeAlphaTarget=1;
-  // fly all the way back out to the wide "whole system" framing, recentred on the brain
-  startTween({theta:orbit.theta, phi:1.3, radius:36, target:new THREE.Vector3(0,0,0)}, 1300, ()=>{ if(g===gen) locked=false; });
-  clearTimeout(idleTimer); idleTimer=setTimeout(()=>{autoRotate=true;},1600);
+function finishInside(g){ if(g!==gen)return; mode="inside"; locked=false; nodeAlphaTarget=0; }
+
+/* back: the page (with its glow) shrinks to a point and fades, then the 3D hub is fully back */
+function finalizeHub(g){
+  if(g!==gen)return;
+  insideEl.classList.remove("show"); insideEl.classList.remove("iris");
+  insideEl.style.transform=""; insideEl.style.borderRadius="";
+  hidePanel();
+  mode="hub"; locked=false;
+  clearTimeout(idleTimer); idleTimer=setTimeout(()=>{autoRotate=true;},900);
 }
 
 function diveIn(key){
-  if(mode!=="hub"||locked)return;                 // only from the hub, not mid-warp
+  if(mode!=="hub"||locked)return;                 // only from the hub, not mid-transition
   const g=++gen; clearSafety();
   locked=true; current=key; mode="warp"; hovered=null; hidePreview(); cursorEl.classList.remove("look");
   applyTheme(key); colorTarget=new THREE.Color(NTS[key].color);
@@ -606,21 +622,39 @@ function diveIn(key){
   flash=1; autoRotate=false; clearTimeout(idleTimer);
   const node=nodes.find(n=>n.userData.key===key), p=node.userData.base, dir=p.clone().normalize();
   const aimTheta=Math.atan2(dir.z,dir.x), aimPhi=Math.max(.5,Math.min(2.64,Math.acos(dir.y)+0.05));
-  // 1) wind up: aim + pull back   2) warp in   3) unlock only when the camera has fully landed
-  startTween({theta:aimTheta, phi:aimPhi, radius:orbit.radius+4.5, target:p.clone()}, 650, ()=>{
+  // 1) centre on the node   2) pull back to gather speed   3) lunge in   4) flare+warp   5) preview flies in
+  startTween({theta:aimTheta, phi:aimPhi, radius:10, target:p.clone()}, 700, ()=>{
     if(g!==gen)return;
-    startWarp(1,1050,()=>{ if(g===gen) arriveInside(key); });
-    startTween({theta:aimTheta, phi:aimPhi, radius:1.2, target:p.clone()}, 1050, ()=>{ if(g===gen) locked=false; });
+    startTween({theta:aimTheta, phi:aimPhi, radius:14, target:p.clone()}, 420, ()=>{   // wind up (pull back)
+      if(g!==gen)return;
+      startTween({theta:aimTheta, phi:aimPhi, radius:3, target:p.clone()}, 760, ()=>{  // lunge toward it
+        if(g!==gen)return;
+        startWarp(1,2300);                         // right on it -> flare -> space -> streaks
+        startTween({theta:aimTheta, phi:aimPhi, radius:0.8, target:p.clone()}, 900, null);  // push through
+      });
+    });
   });
-  safety.push(setTimeout(()=>{ if(g===gen){ arriveInside(key); locked=false; } }, 2400));
+  safety.push(setTimeout(()=>revealInside(key,g), 2650));  // preview flies in once the streaks are up
+  safety.push(setTimeout(()=>finishInside(g), 4150));
 }
 function backToHub(){
   if(mode!=="inside"||locked)return;
   const g=++gen; clearSafety();
   locked=true; mode="warp"; flash=1;
-  startWarp(-1,1050,()=>{ if(g===gen) arriveHub(g); });   // flash covers the swap
-  safety.push(setTimeout(()=>{ if(g===gen) arriveHub(g); }, 1400));
-  safety.push(setTimeout(()=>{ if(g===gen) locked=false; }, 3200));
+  startWarp(-1,1450);                               // streaks + space recede, revealing the hub
+  // bring the hub state back so it's there behind the collapsing dot
+  document.getElementById("ui").classList.add("on");
+  document.querySelectorAll(".nt").forEach(b=>b.classList.remove("active"));
+  backBtn.classList.remove("show");
+  colorTarget=NEUTRAL.clone(); nodeAlphaTarget=1;
+  // the page + its glow shrink all the way down to a point...
+  insideEl.classList.add("iris");
+  insideEl.style.transform="scale(0.012)";
+  insideEl.style.borderRadius="50%";
+  safety.push(setTimeout(()=>{ if(g===gen) insideEl.classList.remove("show"); }, 1080));  // ...then the dot fades away
+  // camera pulls back out to the exact "Inside the Cell" entry framing
+  startTween({theta:HUB_VIEW.theta, phi:HUB_VIEW.phi, radius:HUB_VIEW.radius, target:new THREE.Vector3(0,0,0)}, 1500, ()=>{ if(g===gen) finalizeHub(g); });
+  safety.push(setTimeout(()=>finalizeHub(g), 1700));
 }
 backBtn.addEventListener("click",backToHub);
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&mode==="inside") backToHub(); });
@@ -746,7 +780,9 @@ function animate(){
   nodeAlpha+=(nodeAlphaTarget-nodeAlpha)*0.12;
   nodes.forEach(n=>{
     n.rotation.y+=0.01;n.rotation.x+=0.006;
-    const b=n.userData.base;n.position.y=b.y+Math.sin(t*1.2+n.userData.phase)*0.6;
+    const b=n.userData.base;
+    // freeze the active node dead-centre during a transition so the flare/streaks line up
+    n.position.y=b.y+((mode!=="hub"&&n.userData.key===current)?0:Math.sin(t*1.2+n.userData.phase)*0.6);
     n.userData.h+=(((mode==="hub"&&hovered===n)?1:0)-n.userData.h)*0.15;
     const s=(1+Math.sin(t*2+n.userData.phase)*0.06)*(1+n.userData.h*0.6);
     n.scale.setScalar(s);
